@@ -28,6 +28,7 @@ export function Navbar() {
     const navLinks = [
         { href: "/", label: "Sanctuary" },
         { href: "/my-plants", label: "My Greenhouse" },
+        { href: "/community", label: "Community Garden 🌍" },
         { href: "/my-badges", label: "Badges" },
     ];
 

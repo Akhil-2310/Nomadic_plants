@@ -18,6 +18,7 @@ export default function Register() {
 
     const [species, setSpecies] = useState("");
     const [name, setName] = useState("");
+    const [location, setLocation] = useState("");
     const [photo, setPhoto] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -61,14 +62,15 @@ export default function Register() {
 
             const transaction = prepareContractCall({
                 contract,
-                method: "function registerPlant(string species, string name, string photoIPFS)",
-                params: [species, name, cid],
+                method: "function registerPlant(string species, string name, string photoIPFS, string location)",
+                params: [species, name, cid, location],
             });
 
             await sendTransaction(transaction);
             setIsSuccess(true);
             setSpecies("");
             setName("");
+            setLocation("");
             setPhoto(null);
         } catch (err) {
             console.error(err);
@@ -137,6 +139,19 @@ export default function Register() {
                                         placeholder="e.g. Monstera Deliciosa"
                                         value={species}
                                         onChange={(e) => setSpecies(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="location" className="block text-sm font-bold text-gray-700 mb-1">Initial Location</label>
+                                    <input
+                                        id="location"
+                                        name="location"
+                                        type="text"
+                                        required
+                                        className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-400 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 sm:text-sm bg-gray-50/50"
+                                        placeholder="e.g. Chiang Mai, Thailand"
+                                        value={location}
+                                        onChange={(e) => setLocation(e.target.value)}
                                     />
                                 </div>
 

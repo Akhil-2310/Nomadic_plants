@@ -58,18 +58,18 @@ export default function MyPlants() {
 
                         const plantDetails = await readContract({
                             contract,
-                            method: "function plants(uint256) view returns (string species, string name, address currentSteward, uint256 lastProofTime, string latestPhotoIPFS, bool isMemorialized)",
+                            method: "function getPlant(uint256 plantId) view returns ((string species, string name, address currentSteward, uint256 lastProofTime, string latestPhotoIPFS, bool isMemorialized, address[] stewards, bool isUpForAdoption, string location))",
                             params: [tokenId]
                         });
 
                         fetchedPlants.push({
                             id: tokenId,
-                            species: plantDetails[0],
-                            name: plantDetails[1],
-                            currentSteward: plantDetails[2],
-                            lastProofTime: plantDetails[3],
-                            latestPhotoIPFS: plantDetails[4],
-                            isMemorialized: plantDetails[5]
+                            species: plantDetails.species,
+                            name: plantDetails.name,
+                            currentSteward: plantDetails.currentSteward,
+                            lastProofTime: plantDetails.lastProofTime,
+                            latestPhotoIPFS: plantDetails.latestPhotoIPFS,
+                            isMemorialized: plantDetails.isMemorialized
                         });
                     } catch (innerErr) {
                         console.warn(`Failed to fetch token at index ${i}`, innerErr);

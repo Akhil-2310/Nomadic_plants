@@ -9,6 +9,8 @@ interface PlantCardProps {
     lastProofTime: bigint; // Unix timestamp
     isMemorialized: boolean;
     currentSteward: string;
+    isUpForAdoption?: boolean;
+    location?: string;
 }
 
 function timeAgo(timestamp: bigint) {
@@ -19,7 +21,7 @@ function timeAgo(timestamp: bigint) {
     return `${days} days ago`;
 }
 
-export function PlantCard({ id, name, species, photo, lastProofTime, isMemorialized, currentSteward }: PlantCardProps) {
+export function PlantCard({ id, name, species, photo, lastProofTime, isMemorialized, currentSteward, isUpForAdoption, location }: PlantCardProps) {
     const daysSinceProof = Math.floor((Date.now() / 1000 - Number(lastProofTime)) / (3600 * 24));
     const isHealthy = daysSinceProof <= 30;
 
@@ -40,18 +42,25 @@ export function PlantCard({ id, name, species, photo, lastProofTime, isMemoriali
                 />
 
                 {/* Status Badge */}
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
                     {isMemorialized ? (
                         <span className="px-3 py-1 bg-gray-900/80 backdrop-blur text-white text-xs font-bold uppercase tracking-wider rounded-full">
                             Memorial
                         </span>
                     ) : (
-                        <span className={clsx(
-                            "px-3 py-1 backdrop-blur text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-sm",
-                            isHealthy ? "bg-green-500/90" : "bg-red-500/90"
-                        )}>
-                            {isHealthy ? "Healthy" : "Needs Care"}
-                        </span>
+                        <>
+                            {isUpForAdoption && (
+                                <span className="px-3 py-1 bg-blue-500/90 backdrop-blur text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-sm animate-pulse">
+                                    Adopt Me 🌍
+                                </span>
+                            )}
+                            <span className={clsx(
+                                "px-3 py-1 backdrop-blur text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-sm",
+                                isHealthy ? "bg-green-500/90" : "bg-red-500/90"
+                            )}>
+                                {isHealthy ? "Healthy" : "Needs Care"}
+                            </span>
+                        </>
                     )}
                 </div>
             </div>
@@ -62,6 +71,12 @@ export function PlantCard({ id, name, species, photo, lastProofTime, isMemoriali
                     <h3 className="text-2xl font-bold text-gray-900 font-serif mt-1 group-hover:text-green-700 transition-colors">
                         {name}
                     </h3>
+                    {location && (
+                        <div className="flex items-center gap-1 mt-2 text-gray-500 text-sm">
+                            <span>📍</span>
+                            <span>{location}</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-auto space-y-4">

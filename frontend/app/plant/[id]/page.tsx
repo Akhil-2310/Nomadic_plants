@@ -1,8 +1,8 @@
 "use client";
 
 import { Navbar } from "@/components/Navbar";
-import { useActiveAccount, useReadContract } from "thirdweb/react";
-import { getContract } from "thirdweb";
+import { useActiveAccount, useReadContract, useContractEvents, useSendTransaction } from "thirdweb/react";
+import { getContract, prepareEvent, prepareContractCall } from "thirdweb";
 import { sepolia } from "thirdweb/chains";
 import { client } from "@/lib/config";
 import { useEffect, useState, use } from "react";
@@ -10,6 +10,7 @@ import clsx from "clsx";
 import { TransferModal } from "@/components/TransferModal";
 import { PhotoProofModal } from "@/components/PhotoProofModal";
 import { MemorializeModal } from "@/components/MemorializeModal";
+import { AdoptionModal } from "@/components/AdoptionModal";
 
 const REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_PLANT_REGISTRY_ADDRESS as `0x${string}`;
 
@@ -29,6 +30,9 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
     const [isTransferOpen, setTransferOpen] = useState(false);
     const [isProofOpen, setProofOpen] = useState(false);
     const [isMemorializeOpen, setMemorializeOpen] = useState(false);
+    const [isAdoptionOpen, setAdoptionOpen] = useState(false);
+
+    const { mutateAsync: sendTransaction, isPending: isAdopting } = useSendTransaction();
 
     const contract = getContract({
         client,
@@ -39,11 +43,56 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
     // Fetch Plant
     const { data: plantData, isLoading } = useReadContract({
         contract,
-        method: "function getPlant(uint256 plantId) view returns ((string species, string name, address currentSteward, uint256 lastProofTime, string latestPhotoIPFS, bool isMemorialized, address[] stewards))",
+        method: "function getPlant(uint256 plantId) view returns ((string species, string name, address currentSteward, uint256 lastProofTime, string latestPhotoIPFS, bool isMemorialized, address[] stewards, bool isUpForAdoption, string location))",
         params: [id],
     });
 
+    // Fetch Care History
+    const { data: careEvents, isLoading: isLoadingHistory } = useContractEvents({
+        contract,
+        events: [
+            prepareEvent({
+                signature: "event ProofSubmitted(uint256 indexed plantId, string ipfsHash)",
+                filters: {
+                    plantId: id,
+                },
+            }),
+        ],
+    });
+
     const plant = plantData as any; // Quick hack for MVP types
+
+    const handleAdopt = async () => {
+        if (!account) return alert("Please connect your wallet");
+        try {
+            const transaction = prepareContractCall({
+                contract,
+                method: "function adoptPlant(uint256 plantId)",
+                params: [id],
+            });
+            await sendTransaction(transaction);
+            // MVP: Force reload to fetch fresh state
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to adopt plant");
+        }
+    };
+
+    const handleCancelAdoption = async () => {
+        try {
+            const transaction = prepareContractCall({
+                contract,
+                method: "function cancelAdoption(uint256 plantId)",
+                params: [id],
+            });
+            await sendTransaction(transaction);
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to cancel adoption");
+        }
+    };
 
     if (isLoading) return (
         <div className="min-h-screen bg-stone-50 flex items-center justify-center">
@@ -65,13 +114,16 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
     );
 
     // Destructure safely
-    const species = plant.species || plant[0];
-    const name = plant.name || plant[1];
-    const currentSteward = plant.currentSteward || plant[2];
-    const lastProofTime = plant.lastProofTime || plant[3];
-    const latestPhoto = plant.latestPhotoIPFS || plant[4];
-    const isMemorialized = plant.isMemorialized || plant[5];
-    const stewards = plant.stewards || plant[6];
+    // Destructure safely
+    const species = plant.species;
+    const name = plant.name;
+    const currentSteward = plant.currentSteward;
+    const lastProofTime = plant.lastProofTime;
+    const latestPhoto = plant.latestPhotoIPFS;
+    const isMemorialized = plant.isMemorialized;
+    const stewards = plant.stewards;
+    const isUpForAdoption = plant.isUpForAdoption;
+    const location = plant.location;
 
     const isOwner = account?.address === currentSteward;
     const daysSinceProof = Math.floor((Date.now() / 1000 - Number(lastProofTime)) / (3600 * 24));
@@ -111,6 +163,13 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                                     </span>
                                 </div>
                             )}
+                            {isUpForAdoption && !isMemorialized && (
+                                <div className="absolute top-4 right-4 animate-pulse">
+                                    <span className="px-4 py-2 bg-blue-600/90 backdrop-blur text-white text-sm font-bold uppercase tracking-wider rounded-full shadow-lg">
+                                        Up for Adoption 🌍
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Info Section */}
@@ -130,6 +189,13 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                                 </span>
                             </div>
 
+                            {location && (
+                                <div className="flex items-center gap-2 mb-6 text-gray-600 bg-gray-50 px-4 py-2 rounded-lg inline-block w-fit">
+                                    <span>📍</span>
+                                    <span className="font-semibold">{location}</span>
+                                </div>
+                            )}
+
                             <div className="bg-green-50 rounded-2xl p-6 mb-8 border border-green-100">
                                 <h3 className="text-xs font-bold text-green-500 uppercase tracking-widest mb-2">Current Steward</h3>
                                 <div className="flex items-center gap-3">
@@ -140,27 +206,16 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                                 </div>
                             </div>
 
+                            {/* Owner Actions */}
                             {isOwner && !isMemorialized ? (
                                 <>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {daysSinceProof >= 30 ? (
-                                            <button
-                                                onClick={() => setProofOpen(true)}
-                                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg shadow-green-200 transition-all hover:-translate-y-1"
-                                            >
-                                                Log Care 📸
-                                            </button>
-                                        ) : (
-                                            <button
-                                                disabled
-                                                className="w-full bg-gray-300 text-gray-500 font-bold py-4 px-4 rounded-xl cursor-not-allowed flex flex-col items-center justify-center leading-tight"
-                                            >
-                                                <span>Log Care 📸</span>
-                                                <span className="text-[10px] uppercase tracking-wide mt-1">
-                                                    Available in {30 - daysSinceProof} days
-                                                </span>
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={() => setProofOpen(true)}
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg shadow-green-200 transition-all hover:-translate-y-1"
+                                        >
+                                            Log Care 📸
+                                        </button>
                                         <button
                                             onClick={() => setTransferOpen(true)}
                                             className="w-full bg-white border-2 border-green-100 hover:border-green-300 text-green-800 font-bold py-4 px-4 rounded-xl transition-all hover:-translate-y-1"
@@ -169,6 +224,23 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                                         </button>
                                     </div>
                                     <div className="mt-4">
+                                        {isUpForAdoption ? (
+                                            <button
+                                                onClick={handleCancelAdoption}
+                                                disabled={isAdopting}
+                                                className="w-full bg-orange-100 hover:bg-orange-200 text-orange-800 font-bold py-3 px-4 rounded-xl transition-all mb-4"
+                                            >
+                                                Cancel Adoption Listing 🚫
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => setAdoptionOpen(true)}
+                                                className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-3 px-4 rounded-xl transition-all mb-4 border border-blue-200"
+                                            >
+                                                List for Adoption 🌍
+                                            </button>
+                                        )}
+
                                         <button
                                             onClick={() => setMemorializeOpen(true)}
                                             className="w-full text-xs text-red-400 hover:text-red-600 hover:underline py-2"
@@ -179,8 +251,22 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                                 </>
                             ) : (
                                 !isMemorialized && (
-                                    <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 text-center text-gray-500 text-sm">
-                                        You are viewing this plant as a guest.
+                                    <div className="space-y-4">
+                                        {isUpForAdoption ? (
+                                            <button
+                                                onClick={handleAdopt}
+                                                disabled={isAdopting}
+                                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg shadow-blue-200 transition-all hover:-translate-y-1 animate-pulse"
+                                            >
+                                                {isAdopting ? "Adopting..." : "Adopt this Plant 🤝"}
+                                            </button>
+                                        ) : (
+                                            <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 text-center text-gray-500 text-sm">
+                                                You are viewing this plant as a guest.
+                                                <br />
+                                                <span className="text-xs text-gray-400">Ask the steward to list it for adoption if you wish to take over.</span>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             )}
@@ -212,12 +298,57 @@ export default function PlantDetails({ params }: { params: Promise<{ id: string 
                             ))}
                         </div>
                     </div>
+
+                    {/* Care History */}
+                    <div className="px-8 py-10 md:px-12 bg-white border-t border-gray-100">
+                        <div className="flex items-center gap-3 mb-8">
+                            <h3 className="text-xl font-bold text-gray-900 font-serif">Care Journal</h3>
+                            <div className="h-px bg-gray-200 flex-1"></div>
+                        </div>
+
+                        {!careEvents || careEvents.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 text-sm">
+                                No care logs recorded yet. Be the first to capture a moment! 📸
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {[...careEvents].reverse().map((event, idx) => {
+                                    const args = event.args as any;
+                                    const photoHash = args.ipfsHash;
+                                    // Events don't strictly have 'blockTimestamp' in args, usually need to fetch block.
+                                    // For MVP, we might treat it as 'Recorded in block X'. 
+                                    // Actually better: thirdweb events include `blockNumber`. 
+                                    // Resolving timestamp is async and expensive for lists. 
+                                    // We'll just show the photo and "Care Logged" for now.
+
+                                    return (
+                                        <div key={idx} className="group relative aspect-square bg-gray-100 rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all">
+                                            <img
+                                                src={process.env.NEXT_PUBLIC_GATEWAY_URL
+                                                    ? `https://${process.env.NEXT_PUBLIC_GATEWAY_URL}/ipfs/${photoHash}`
+                                                    : `https://gateway.pinata.cloud/ipfs/${photoHash}`
+                                                }
+                                                alt="Care log"
+                                                className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                                                <span className="text-white text-xs font-bold">
+                                                    Log #{careEvents.length - idx}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </main >
 
             <TransferModal plantId={id} isOpen={isTransferOpen} onClose={() => setTransferOpen(false)} />
             <PhotoProofModal plantId={id} isOpen={isProofOpen} onClose={() => setProofOpen(false)} />
             <MemorializeModal plantId={id} isOpen={isMemorializeOpen} onClose={() => setMemorializeOpen(false)} />
+            <AdoptionModal plantId={id} isOpen={isAdoptionOpen} onClose={() => setAdoptionOpen(false)} />
         </div >
     );
 }
