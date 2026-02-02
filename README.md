@@ -75,7 +75,6 @@ Browse plants in your local area (mocked GPS) that need a new home. Mint a fresh
    ```bash
    npm run dev
    ```
-   *Press `w` to run in Web Browser, or scan the QR code with Expo Go.*
 
 ## 🔮 Future Roadmap
 
